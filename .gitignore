@@ -1,0 +1,13 @@
+# ======================
+# Frontend (Node.js)
+# ======================
+frontend/node_modules/
+frontend/build/
+frontend/.env
+
+# ======================
+# Backend (Python/Flask)
+# ======================
+backend/venv/
+backend/__pycache__/
+backend/.env
