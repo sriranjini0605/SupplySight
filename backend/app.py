@@ -37,7 +37,7 @@ def get_all_graph():
     with drv.session() as session:
         results = session.run(
             "MATCH (p:Part)-[:SUPPLIED_BY]->(s:Supplier) "
-            "RETURN p.id AS part, collect(s.name) AS suppliers"
+            "RETURN p.id AS part, p.name AS name, collect(s.name) AS suppliers"
         )
         data = [record.data() for record in results]
     return jsonify(data)
@@ -47,10 +47,10 @@ def get_graph_record(part_id):
     with drv.session() as session:
         record = session.run(
             "MATCH (p:Part {id:$pid})-[:SUPPLIED_BY]->(s:Supplier) "
-            "RETURN p.id AS part, collect(s.name) AS suppliers",
+            "RETURN p.id AS part, p.name AS name, collect(s.name) AS suppliers",
             pid=part_id
         ).single()
-    return record.data() if record else {"part": part_id, "suppliers": []}
+    return record.data() if record else {"part": part_id, "name": "", "suppliers": []}
 
 # Endpoint: Single-part graph data
 @app.route("/api/graph/<part_id>")
