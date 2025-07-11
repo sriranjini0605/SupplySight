@@ -3,9 +3,7 @@ import axios from "axios";
 import ForceGraph2D from "react-force-graph-2d";
 import "./App.css";
 
-//
 // Hook to measure a DOM node’s size
-//
 function useResize(ref) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   useEffect(() => {
@@ -32,38 +30,49 @@ function Spinner() {
   );
 }
 
-function ChatPane({ partId }) {
-  const [messages, setMessages] = useState([]);
+function ChatPane({
+  messages,
+  setMessages,
+  sessionId,
+  setSessionId,
+  chatLoading,
+  setChatLoading,
+}) {
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  // Reset chat when part changes
-  useEffect(() => {
-    setMessages([]);
-    setInput("");
-    setLoading(false);
-  }, [partId]);
 
   const send = async () => {
     if (!input.trim()) return;
     const txt = input.trim();
+
+    // Push user message
     setMessages((m) => [...m, { from: "user", text: txt }]);
     setInput("");
-    setLoading(true);
+    setChatLoading(true);
+
     try {
-      const res = await axios.post("/api/chat", { message: txt, partId });
-      setMessages((m) => [...m, { from: "bot", text: res.data.reply }]);
-    } catch {
+      const payload = { message: txt };
+      if (sessionId) payload.sessionId = sessionId;
+
+      const res = await axios.post("/api/chat", payload);
+      if (res.data.sessionId) setSessionId(res.data.sessionId);
+
+      setMessages((m) => [
+        ...m,
+        { from: "bot", text: res.data.reply || "No reply" },
+      ]);
+    } catch (err) {
       setMessages((m) => [
         ...m,
         { from: "bot", text: "⚠️ Sorry, something went wrong." },
       ]);
     } finally {
-      setLoading(false);
+      setChatLoading(false);
     }
   };
 
-  const onEnter = (e) => e.key === "Enter" && send();
+  const onEnter = (e) => {
+    if (e.key === "Enter") send();
+  };
 
   return (
     <div className="chat-container">
@@ -76,7 +85,7 @@ function ChatPane({ partId }) {
             {m.text}
           </div>
         ))}
-        {loading && <div className="chat-message bot">…thinking…</div>}
+        {chatLoading && <div className="chat-message bot">…thinking…</div>}
       </div>
       <div className="chat-input-row">
         <input
@@ -84,9 +93,9 @@ function ChatPane({ partId }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onEnter}
-          disabled={loading}
+          disabled={chatLoading}
         />
-        <button onClick={send} disabled={loading || !input.trim()}>
+        <button onClick={send} disabled={chatLoading || !input.trim()}>
           Send
         </button>
       </div>
@@ -104,8 +113,11 @@ function App() {
     history: [],
     forecast: "",
   });
-  const [isLoading, setIsLoading] = useState(false);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
+  const [messages, setMessages] = useState([]);
+  const [sessionId, setSessionId] = useState(null);
   const fgRef = useRef();
   const wrapperRef = useRef();
   const { width, height } = useResize(wrapperRef);
@@ -115,7 +127,8 @@ function App() {
     axios
       .get("/api/graph/all")
       .then((res) => {
-        const map = {}, links = [];
+        const map = {},
+          links = [];
         res.data.forEach(({ part, name, suppliers }) => {
           if (!map[part]) map[part] = { id: part, type: "part", name };
           suppliers.forEach((s) => {
@@ -128,9 +141,10 @@ function App() {
       .catch(console.error);
   }, []);
 
+  // When a part node is clicked
   const onNodeClick = (node) => {
     if (node.type !== "part") return;
-    setIsLoading(true);
+    setDetailsLoading(true);
     Promise.all([
       axios.get(`/api/graph/${node.id}`),
       axios.get(`/api/risk/${node.id}`),
@@ -149,7 +163,7 @@ function App() {
         fgRef.current.zoomToFit(400);
       })
       .catch(console.error)
-      .finally(() => setIsLoading(false));
+      .finally(() => setDetailsLoading(false));
   };
 
   return (
@@ -187,18 +201,20 @@ function App() {
           <button
             className={activeTab === "details" ? "active" : ""}
             onClick={() => setActiveTab("details")}
+            disabled={chatLoading}
           >
             Details
           </button>
           <button
             className={activeTab === "chat" ? "active" : ""}
             onClick={() => setActiveTab("chat")}
+            disabled={detailsLoading}
           >
             Chat
           </button>
         </div>
 
-        {isLoading ? (
+        {detailsLoading ? (
           <Spinner />
         ) : activeTab === "details" ? (
           <div className="details">
@@ -233,7 +249,14 @@ function App() {
             )}
           </div>
         ) : (
-          <ChatPane partId={panel.part} />
+          <ChatPane
+            messages={messages}
+            setMessages={setMessages}
+            sessionId={sessionId}
+            setSessionId={setSessionId}
+            chatLoading={chatLoading}
+            setChatLoading={setChatLoading}
+          />
         )}
       </div>
     </div>

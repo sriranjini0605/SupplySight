@@ -1,5 +1,7 @@
 import os
-from flask import Flask, jsonify
+import uuid
+
+from flask import Flask, jsonify, request
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
 import snowflake.connector
@@ -28,6 +30,13 @@ def sf_conn():
 
 # ─── Bedrock Runtime client ─────────────────────────────────
 bedrock = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION"))
+
+agent_client = boto3.client(
+    "bedrock-agent-runtime",
+    region_name=os.getenv("AWS_REGION")
+)
+AGENT_ID = os.getenv("BEDROCK_AGENT_ID")
+AGENT_ALIAS_ID = os.getenv("BEDROCK_AGENT_ALIAS_ID")
 
 app = Flask(__name__)
 
@@ -131,6 +140,44 @@ def get_forecast(part_id):
     )
     forecast_text = resp["output"]["message"]["content"][0]["text"]
     return jsonify(history=history, forecast=forecast_text)
+
+@app.route("/api/chat", methods=["POST"])
+def chat():
+    """
+    POST /api/chat
+    {
+      "message": "<user question>",
+      "sessionId": "<optional existing session id>"
+    }
+    """
+    data = request.get_json(force=True)
+    user_msg = data.get("message")
+    if not user_msg:
+        return jsonify(error="Missing 'message' in body"), 400
+
+    session_id = data.get("sessionId") or str(uuid.uuid4())
+
+    try:
+        response = agent_client.invoke_agent(
+            agentId=AGENT_ID,
+            agentAliasId=AGENT_ALIAS_ID,
+            sessionId=session_id,
+            inputText=user_msg,
+            enableTrace=False
+        )
+
+        # stream of chunks — stitch them together
+        completion = ""
+        for event in response.get("completion", []):
+            chunk = event.get("chunk", {})
+            bytes_ = chunk.get("bytes", b"")
+            completion += bytes_.decode("utf-8")
+
+        return jsonify(reply=completion, sessionId=session_id)
+
+    except Exception as e:
+        app.logger.exception("Agent invocation failed")
+        return jsonify(error=str(e)), 500
 
 if __name__ == "__main__":
     if not os.getenv("BEDROCK_MODEL_ID"):
