@@ -3,6 +3,8 @@ import axios from "axios";
 import ForceGraph2D from "react-force-graph-2d";
 import "./App.css";
 
+axios.defaults.baseURL = process.env.REACT_APP_API_URL;
+
 // Hook to measure a DOM node’s size
 function useResize(ref) {
   const [size, setSize] = useState({ width: 0, height: 0 });

@@ -2,6 +2,7 @@ import os
 import uuid
 
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
 import snowflake.connector
@@ -39,6 +40,7 @@ AGENT_ID = os.getenv("BEDROCK_AGENT_ID")
 AGENT_ALIAS_ID = os.getenv("BEDROCK_AGENT_ALIAS_ID")
 
 app = Flask(__name__)
+CORS(app)
 
 # ─── DEBUG: count your nodes ───────────────────────────────
 @app.route("/api/graph/count")
